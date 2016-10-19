@@ -2,20 +2,18 @@ import './libs/d3/d3';
 import TimeSeries from 'app/core/time_series2';
 import kbn from 'app/core/utils/kbn';
 import {MetricsPanelCtrl} from 'app/plugins/sdk';
-import {heatmapEditor, displayEditor} from './properties';
+import {heatmapEditor, displayEditor, pluginName} from './properties';
 import _ from 'lodash';
 import './series_overrides_heatmap_ctrl';
-import './css/heatmap.css!'
+import './css/heatmap.css!';
 
-System.config({
-	  meta: {
-	    'plugins/savantly-heatmap-panel/libs/d3plus/d3plus.full.js': {
-	      format: 'global'
-	    }
-	  }
-	});
-
-System.import('plugins/savantly-heatmap-panel/libs/d3plus/d3plus.full.js');
+const panelOptions = {
+	treeMap:{
+    	modes: ['squarify', 'slice', 'dice', 'slice-dice'],
+    	nodeSizeProperties: ['value', 'count'],
+    	aggregationFunctions: ['sum', 'min', 'max', 'extent', 'mean', 'median', 'quantile', 'variance', 'deviation']
+	}
+};
 
 const panelDefaults = {
 	// other style overrides
@@ -43,71 +41,17 @@ const panelDefaults = {
     valueMaps: [
       { value: 'null', op: '=', text: 'N/A' }
     ],
-    content: 'graph LR\n' +
-		'A[Square Rect] -- Link text --> B((Circle))\n' +
-		'A --> C(Round Rect)\n' +
-		'B --> D{Rhombus}\n' +
-		'C --> D\n',
-	init: {
-		startOnLoad: false,
-		logLevel: 2, //1:debug, 2:info, 3:warn, 4:error, 5:fatal
-    	cloneCssStyles: false, // - This options controls whether or not the css rules should be copied into the generated svg
-		startOnLoad: false, // - This options controls whether or mermaid starts when the page loads
-		arrowMarkerAbsolute: true, // - This options controls whether or arrow markers in html code will be absolute paths or an anchor, #. This matters if you are using base tag settings.
-		flowchart: {
-			htmlLabels: true,
-			useMaxWidth: true
-		},
-		sequenceDiagram: {
-			diagramMarginX: 50, // - margin to the right and left of the sequence diagram
-			diagramMarginY: 10, // - margin to the over and under the sequence diagram
-			actorMargin: 50, // - Margin between actors
-			width: 150, // - Width of actor boxes
-			height: 65, // - Height of actor boxes00000000001111
-			boxMargin: 10, // - Margin around l01oop boxes
-			boxTextMargin: 5, // - margin around the text in loop/alt/opt boxes
-			noteMargin: 10, // - margin around notes
-			messageMargin: 35, // - Space between messages
-			mirrorActors: true, // - mirror actors under diagram
-			bottomMarginAdj: 1, // - Depending on css styling this might need adjustment. Prolongs the edge of the diagram downwards
-			useMaxWidth: true, // - when this flag is set the height and width is set to 100% and is then scaling with the available space if not the absolute space required is used
-		},
-		gantt: {
-			titleTopMargin: 25, // - margin top for the text over the gantt diagram
-			barHeight: 20, // - the height of the bars in the graph
-			barGap: 4, // - the margin between the different activities in the gantt diagram
-			topPadding: 50, // - margin between title and gantt diagram and between axis and gantt diagram.
-			leftPadding: 75, // - the space allocated for the section name to the left of the activities.
-			gridLineStartPadding: 35, // - Vertical starting position of the grid lines
-			fontSize: 11, // - font size ...
-			fontFamily: '"Open-Sans", "sans-serif"', // - font family ...
-			numberSectionStyles: 3, // - the number of alternating section styles
-			/** axisFormatter: // - formatting of the axis, this might need adjustment to match your locale and preferences
-				[
-		        // Within a day
-		        ['%I:%M', function (d) {
-		            return d.getHours();
-		        }],
-		        // Monday a week
-		        ['w. %U', function (d) {
-		            return d.getDay() == 1;
-		        }],
-		        // Day within a week (not monday)
-		        ['%a %d', function (d) {
-		            return d.getDay() && d.getDate() != 1;
-		        }],
-		        // within a month
-		        ['%b %d', function (d) {
-		            return d.getDate() != 1;
-		        }],
-		        // Month
-		        ['%m-%y', function (d) {
-		            return d.getMonth();
-		        }]] **/
-		},
-		//classDiagram: {},
-    	//info: {}
-	}
+    treeMap: {
+    	mode: 'squarify',
+    	groups: [{key:'server', value: '/^.*\./g'}],
+    	aggregationFunction: 'mean',
+    	enableTimeBlocks: false,
+    	enableGrouping: true,
+    	debug: false,
+    	depth: 0,
+    	ids: ['alias'],
+    	nodeSizeProperty: "value"
+    }
 };
 
 class HeatmapCtrl extends MetricsPanelCtrl {
@@ -115,6 +59,7 @@ class HeatmapCtrl extends MetricsPanelCtrl {
 		super($scope, $injector);
 		_.defaults(this.panel, panelDefaults);
 		
+		this.options = panelOptions;
 		this.panel.chartId = 'chart_' + this.panel.id;
 		this.containerDivId = 'container_'+this.panel.chartId;
 		this.$sce = $sce;
@@ -125,9 +70,24 @@ class HeatmapCtrl extends MetricsPanelCtrl {
 	}
 	
 	initializePanel(){
+		var d3plusPath = 'plugins/'+pluginName+'/libs/d3plus/d3plus.full.js';
+		var _this = this;
+		var meta = {};
+		meta[d3plusPath] = {
+			      format: 'global'
+	    };
+		
+		SystemJS.config({
+			  meta: meta
+			});
+
+		SystemJS.import(d3plusPath).then(function d3plusLoaded(){
+			console.log('d3plus is loaded');
+			_this.events.emit('render');
+		});
 	}
 	
-	handleParseError(err, hash){
+	handleError(err){
 		this.getPanelContainer().html('<p>Error:</p><pre>' + err + '</pre>');
 	}
 	
@@ -145,29 +105,95 @@ class HeatmapCtrl extends MetricsPanelCtrl {
 		console.debug(dataList);
 		this.series = dataList.map(this.seriesHandler.bind(this));
 		console.info('mapped dataList to series');
-		console.debug(this.series);
 
-		var data = {};
-		this.setValues(data);
-		
-		this.render();
+		var preparedData = this.d3plusDataProcessor(this.series);
+		this.render(preparedData);
 	}
-
+	
+	/**
+	 * Prepare data for d3plus
+	 */
+	d3plusDataProcessor(dataArray){
+		var resultArray = [];
+		
+		if(this.panel.treeMap.groups.length < 1){
+			// just add the original items since there are no groups
+			for (var dataIndex=0; dataIndex < dataArray.length; dataIndex++){
+				var newDataItem = Object.assign({}, dataArray[dataIndex]);
+				resultArray.push(newDataItem);
+			}
+		} else {
+			// Process Groups
+			for(var groupIndex=0; groupIndex<this.panel.treeMap.groups.length; groupIndex++){
+				var key = this.panel.treeMap.groups[groupIndex].key;
+				var value = this.panel.treeMap.groups[groupIndex].value;
+				var regex = kbn.stringToJsRegex(value);
+				
+				for (var dataIndex=0; dataIndex < dataArray.length; dataIndex++){
+					var newDataItem = Object.assign({}, dataArray[dataIndex]);
+					var matches = newDataItem.alias.match(regex);
+					if (matches && matches.length > 0){
+						console.debug('group:'+key +'\nalias:'+ newDataItem.alias + '\nregex:' + regex +'\nmatches:' + matches);
+						newDataItem[key] = matches[0];
+					} else {
+						newDataItem[key] = 'NA';
+					}
+					resultArray.push(newDataItem);
+				}
+			}
+		}
+		
+		// add items for time blocks
+		if(this.panel.treeMap.enableTimeBlocks){
+			console.info('creating timeblock records')
+			var timeBlockArray = [];
+			for (var dataIndex=0; dataIndex < resultArray.length; dataIndex++){
+				console.debug('dataIndex:'+dataIndex+', alias:'+resultArray[dataIndex].alias);
+				var dataSeries = resultArray[dataIndex];
+				for(var dataPointIndex=0; dataPointIndex < dataSeries.flotpairs.length; dataPointIndex++){
+					var dataSeriesCopy = Object.assign({}, dataSeries);
+					delete dataSeriesCopy.datapoints;
+					delete dataSeriesCopy.flotpairs;
+					dataSeriesCopy.timestamp = dataSeries.flotpairs[dataPointIndex][0];
+					dataSeriesCopy.value = dataSeries.flotpairs[dataPointIndex][1];
+					timeBlockArray.push(dataSeriesCopy);
+				}
+			}
+			resultArray = timeBlockArray;
+		} else {
+			
+		}
+		return resultArray;
+	}
+	
+	/**
+	 * Series Handler
+	 */
 	seriesHandler(seriesData) {
 		var series = new TimeSeries({
 			datapoints: seriesData.datapoints,
 			alias: seriesData.target.replace(/"|,|;|=|:|{|}/g, '_')
 		});
 	    series.flotpairs = series.getFlotPairs(this.panel.nullPointMode);
+	    series.value = series.stats[this.panel.valueName];
 	    return series;
 	} // End seriesHandler()
 	
 	addSeriesOverride(override) {
 		this.panel.seriesOverrides.push(override || {});
 	}
+	
+	addTreeMapGroup(group) {
+		this.panel.treeMap.groups.push(group || {});
+	}
 
 	removeSeriesOverride(override) {
 		this.panel.seriesOverrides = _.without(this.panel.seriesOverrides, override);
+	    this.render();
+	}
+	
+	removeTreeMapGroup(group) {
+		this.panel.treeMap.groups = _.without(this.panel.treeMap.groups, group);
 	    this.render();
 	}
 	
@@ -188,46 +214,6 @@ class HeatmapCtrl extends MetricsPanelCtrl {
 	addColor(){
 		this.panel.colors.push('rgba(255, 255, 255, 1)');
 	}
-	
-	clearPanel(){
-		$('#'+this.panel.graphId).remove();
-	}
-	
-	setValues(data) {
-	    if (this.series && this.series.length > 0) {
-			for(var i = 0; i < this.series.length; i++){
-				var seriesItem = this.series[i];
-				console.debug('setting values for series');
-				console.debug(seriesItem);
-				data[seriesItem.alias] = this.applyOverrides(seriesItem.alias);
-				var lastPoint = _.last(seriesItem.datapoints);
-			    var lastValue = _.isArray(lastPoint) ? lastPoint[0] : null;
-			
-				if (this.panel.valueName === 'name') {
-					data[seriesItem.alias].value = 0;
-			        data[seriesItem.alias].valueRounded = 0;
-			        data[seriesItem.alias].valueFormated = seriesItem.alias;
-				} else if (_.isString(lastValue)) {
-			        data[seriesItem.alias].value = 0;
-			        data[seriesItem.alias].valueFormated = _.escape(lastValue);
-			        data[seriesItem.alias].valueRounded = 0;
-				} else {
-					data[seriesItem.alias].value = seriesItem.stats[data[seriesItem.alias].valueName];
-			        //data[seriesItem.alias].flotpairs = seriesItem.flotpairs;
-			
-			        var decimalInfo = this.getDecimalsForValue(data[seriesItem.alias].value);
-			        var formatFunc = kbn.valueFormats[this.panel.format];
-			        data[seriesItem.alias].valueFormatted = formatFunc(data[seriesItem.alias].value, decimalInfo.decimals, decimalInfo.scaledDecimals);
-			        data[seriesItem.alias].valueRounded = kbn.roundValue(data[seriesItem.alias].value, decimalInfo.decimals);
-				}
-				if (this.panel.legend.gradient.enabled){
-					data[seriesItem.alias].color = this.getGradientForValue(data[seriesItem.alias].colorData, data[seriesItem.alias].value);
-				} else {
-					data[seriesItem.alias].color = getColorForValue(data[seriesItem.alias].colorData, data[seriesItem.alias].value);
-				}
-			}
-	    }
-	} // End setValues()
 	
 	getGradientForValue(data, value){
 		console.info('Getting gradient for value');
@@ -272,6 +258,20 @@ class HeatmapCtrl extends MetricsPanelCtrl {
 	invertColorOrder() {
 	    this.panel.colors.reverse();
 	    this.refresh();
+	}
+	
+	addTreeMapId(){
+		this.panel.treeMap.ids.push('');
+		this.refresh();
+	}
+	
+	removeTreeMapId(pos){
+		this.panel.treeMap.ids.splice(pos,1);
+		this.refresh();
+	}
+	
+	changeTreeMapId(idString, pos){
+		this.panel.treeMap.ids[pos] = idString;
 	}
 
 	getDecimalsForValue(value) {
@@ -322,30 +322,83 @@ class HeatmapCtrl extends MetricsPanelCtrl {
     	elem.css('height', ctrl.height + 'px');
     	
 
-    	function render(){
-    		updateChart();
+    	function render(data){
+    		updateSize();
+    		updateChart(data);
     	}
     	
-    	function updateChart(){
-    		var data = [{"value": 100, "name": "alpha"},
-    		            {"value": 70, "name": "beta"}];
+    	function updateSize(){
+    		elem.css('height', ctrl.height + 'px');
+    	}
+    	
+    	function updateChart(data){
+    		d3.select("#"+ctrl.containerDivId).selectAll('*').remove();
+    		
+    		/*data = [
+    		        {"value": 100, "alias": "alpha", "group": "group 1"},
+    		        {"value": 70, "alias": "beta", "group": "group 2"},
+    		        {"value": 40, "alias": "gamma", "group": "group 2"},
+    		        {"value": 15, "alias": "delta", "group": "group 2"},
+    		        {"value": 5, "alias": "epsilon", "group": "group 1"},
+    		        {"value": 1, "alias": "zeta", "group": "group 1"}
+    		      ];*/
+    		
+    		
+
+    		// Make sure the necessary IDs are added
+    		var idKeys = Array.from(ctrl.panel.treeMap.ids);
+    		ensureArrayContains(idKeys, 'alias');
+    		if(ctrl.panel.treeMap.enableTimeBlocks){
+    			ensureArrayContains(idKeys, 'timestamp');
+    		}
+    		
+    		// Setup Aggregations 
+    		var aggs = {};
+    		aggs.value = ctrl.panel.treeMap.aggregationFunction;
     		
     		d3plus.viz()
+				.dev(ctrl.panel.treeMap.debug)
+    			.aggs(aggs)
     			.container("#"+ctrl.containerDivId)
     			.data(data)
-    			.type("tree_map")
-    			.id("name")
+    			//.type("tree_map")
+    			.type({"mode": ctrl.panel.treeMap.mode})    // sets the mode of visualization display based on type    
+    			.id({
+    				"value": _.uniq(idKeys),
+    				"grouping": ctrl.panel.treeMap.enableGrouping
+    			})
+    			.depth(Number(ctrl.panel.treeMap.depth))
     			.size("value")
+    			.height(ctrl.height)
+    			.width(ctrl.width)
+    			.color({
+    				"heatmap": [ "grey" , "purple" ],
+    			    "value": "value"
+    			})
+    			.format({ "text" : function( text , key ) {
+				    return text;
+				  }
+				})
     			.draw();
     	}
     	
-    	this.events.on('render', function() {
-			render();
-			ctrl.renderingCompleted();
+    	this.events.on('render', function onRender(data) {
+    		if(typeof d3plus !== 'undefined' && data){
+    			render(data);
+    			ctrl.renderingCompleted();
+    		} else {
+    			console.info('d3plus is not loaded yet');
+    		}
 	    });
 	    
 	}
 // End Class
+}
+
+function ensureArrayContains(array, value) {
+	if (array.indexOf(value) == -1) {
+		array.push(value);
+	}
 }
 
 function getColorForValue(data, value) {
