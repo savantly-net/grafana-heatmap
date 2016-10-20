@@ -1,7 +1,7 @@
 <div class="gf-form-group">
 	<h5>Legend</h5>
 	<div class="gf-form">
-		<editor-checkbox text="Show Legend" model="ctrl.panel.legend.show" class="gf-form-checkbox" ></editor-checkbox>
+		<editor-checkbox text="Series Table" model="ctrl.panel.legend.show" class="gf-form-checkbox" ></editor-checkbox>
 		<div ng-show="ctrl.panel.legend.show">
 			<editor-checkbox text="Min" model="ctrl.panel.legend.min" class="gf-form-checkbox" ></editor-checkbox>
 			<editor-checkbox text="Max" model="ctrl.panel.legend.max" class="gf-form-checkbox" ></editor-checkbox>
@@ -10,10 +10,27 @@
 			<editor-checkbox text="Current" model="ctrl.panel.legend.current" class="gf-form-checkbox" ></editor-checkbox>
 		</div>
 	</div>
+	<div class="gf-form">
+		<editor-checkbox text="Heatmap" model="ctrl.panel.treeMap.showLegend" class="gf-form-checkbox" ></editor-checkbox>
+	</div>
 </div>
 
 <div class="gf-form-group">
-	<h5>Threshold Options</h5>
+	<h5>Options</h5>
+	<div class="gf-form">
+		<label class="gf-form-label width-10">Mode</label> 
+		<select
+			ng-options="option for option in ctrl.options.treeMap.modes"
+			ng-model="ctrl.panel.treeMap.mode" ng-change="ctrl.refresh()"></select>
+	</div>
+	<div class="gf-form">
+		<label class="gf-form-label width-10">Node Size Min</label>
+		<input type="text" placeholder="auto" class="input-small gf-form-input width-10" ng-model="ctrl.panel.treeMap.sizeDomainMin" ng-change="ctrl.refresh()"></input>
+	</div>
+	<div class="gf-form">
+		<label class="gf-form-label width-10">Node Size Max</label>
+		<input type="text" placeholder="auto" class="input-small gf-form-input width-10" ng-model="ctrl.panel.treeMap.sizeDomainMax" ng-change="ctrl.refresh()"></input>
+	</div>
 	<div class="gf-form">
 		<label class="gf-form-label width-10">Thresholds
 			<tip>Define threshold values to map the colors</tip>
@@ -41,16 +58,10 @@
 	          Invert
 	        </a>
     	</span>
-    	<span>
-   			<label class="gf-form-label">
-				<editor-checkbox text="Gradient" model="ctrl.panel.legend.gradient.enabled" class="gf-form-checkbox" ></editor-checkbox>
-				<tip>Only the Max and Min threshold values are considered when using Gradient mode</tip>
-			</label>
-    	</span>
     </div>
 	<div class="gf-form">
-		<label class="gf-form-label width-10">Value</label>
-		<select ng-options="option for option in ctrl.panel.valueOptions" ng-model="ctrl.panel.valueName" ng-change="ctrl.refresh()"></select>
+		<label class="gf-form-label width-10">Data Value By</label>
+		<select ng-options="option for option in ctrl.options.valueTypes" ng-model="ctrl.panel.valueName" ng-change="ctrl.refresh()"></select>
 	</div>
 </div>
 

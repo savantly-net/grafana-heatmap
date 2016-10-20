@@ -41,16 +41,29 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 		}
 	}
 
-	function getColorForValue(data, value) {
-		console.info('Getting color for value');
-		console.debug(data);
-		console.debug(value);
-		for (var i = data.thresholds.length; i > 0; i--) {
-			if (value >= data.thresholds[i - 1]) {
-				return data.colorMap[i];
-			}
+	function colorToHex(color) {
+		if (color.substr(0, 1) === '#') {
+			return color;
 		}
-		return _.first(data.colorMap);
+		var digits = color.replace(/[rgba\(\)\ ]/g, '').split(',');
+		while (digits.length < 3) {
+			digits.push(255);
+		}
+
+		var red = parseInt(digits[0]);
+		var green = parseInt(digits[1]);
+		var blue = parseInt(digits[2]);
+
+		var rgba = blue | green << 8 | red << 16;
+		return '#' + rgba.toString(16);
+	}
+
+	function getColorByXPercentage(canvas, xPercent) {
+		var x = canvas.width * xPercent;
+		var context = canvas.getContext("2d");
+		var p = context.getImageData(x, 1, 1, 1).data;
+		var color = 'rgba(' + [p[0] + ',' + p[1] + ',' + p[2] + ',' + p[3]] + ')';
+		return color;
 	}
 
 	return {
@@ -87,9 +100,9 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 			}();
 
 			panelOptions = {
+				valueTypes: ['avg', 'min', 'max', 'total', 'current'],
 				treeMap: {
 					modes: ['squarify', 'slice', 'dice', 'slice-dice'],
-					nodeSizeProperties: ['value', 'count'],
 					aggregationFunctions: ['sum', 'min', 'max', 'extent', 'mean', 'median', 'quantile', 'variance', 'deviation']
 				}
 			};
@@ -97,30 +110,25 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 				// other style overrides
 				seriesOverrides: [],
 				thresholds: '0,10',
-				colors: ['rgba(50, 172, 45, 0.97)', 'rgba(237, 129, 40, 0.89)', 'rgba(245, 54, 54, 0.9)'],
+				colors: ['rgba(50, 172, 45, 1)', 'rgba(241, 255, 0, 1)', 'rgba(245, 54, 54, 1)'],
 				legend: {
 					show: true,
 					min: true,
 					max: true,
 					avg: true,
 					current: true,
-					total: true,
-					gradient: {
-						enabled: true,
-						show: true
-					}
+					total: true
 				},
 				maxDataPoints: 100,
 				mappingType: 1,
 				nullPointMode: 'connected',
 				format: 'none',
 				valueName: 'avg',
-				valueOptions: ['avg', 'min', 'max', 'total', 'current'],
 				valueMaps: [{ value: 'null', op: '=', text: 'N/A' }],
 				treeMap: {
 					mode: 'squarify',
 					groups: [{ key: 'server', value: '/^.*\./g' }],
-					aggregationFunction: 'mean',
+					aggregationFunction: 'max',
 					enableTimeBlocks: false,
 					enableGrouping: true,
 					debug: false,
@@ -205,31 +213,37 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 						if (this.panel.treeMap.groups.length < 1) {
 							// just add the original items since there are no groups
 							for (var dataIndex = 0; dataIndex < dataArray.length; dataIndex++) {
-								var newDataItem = Object.assign({}, dataArray[dataIndex]);
+								var newDataItem = Object.assign({}, dataArray[dataIndex], dataArray[dataIndex].stats);
 								resultArray.push(newDataItem);
 							}
 						} else {
 							// Process Groups
+							var groupArray = [];
 							for (var groupIndex = 0; groupIndex < this.panel.treeMap.groups.length; groupIndex++) {
-								var key = this.panel.treeMap.groups[groupIndex].key;
-								var value = this.panel.treeMap.groups[groupIndex].value;
-								var regex = kbn.stringToJsRegex(value);
+								groupArray.push({
+									key: this.panel.treeMap.groups[groupIndex].key,
+									regex: kbn.stringToJsRegex(this.panel.treeMap.groups[groupIndex].value)
+								});
+							}
+							for (var dataIndex = 0; dataIndex < dataArray.length; dataIndex++) {
+								var newDataItem = Object.assign({}, dataArray[dataIndex], dataArray[dataIndex].stats);
 
-								for (var dataIndex = 0; dataIndex < dataArray.length; dataIndex++) {
-									var newDataItem = Object.assign({}, dataArray[dataIndex]);
+								for (var groupIndex = 0; groupIndex < groupArray.length; groupIndex++) {
+									var key = groupArray[groupIndex].key;
+									var regex = groupArray[groupIndex].regex;
 									var matches = newDataItem.alias.match(regex);
 									if (matches && matches.length > 0) {
-										console.debug('group:' + key + '\nalias:' + newDataItem.alias + '\nregex:' + regex + '\nmatches:' + matches);
 										newDataItem[key] = matches[0];
 									} else {
 										newDataItem[key] = 'NA';
 									}
-									resultArray.push(newDataItem);
 								}
+								resultArray.push(newDataItem);
 							}
 						}
 
-						// add items for time blocks
+						// If we're using timeBlocks mode
+						// replace the aggregated series with individual records
 						if (this.panel.treeMap.enableTimeBlocks) {
 							console.info('creating timeblock records');
 							var timeBlockArray = [];
@@ -246,7 +260,8 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 								}
 							}
 							resultArray = timeBlockArray;
-						} else {}
+						}
+
 						return resultArray;
 					}
 				}, {
@@ -257,7 +272,6 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 							alias: seriesData.target.replace(/"|,|;|=|:|{|}/g, '_')
 						});
 						series.flotpairs = series.getFlotPairs(this.panel.nullPointMode);
-						series.value = series.stats[this.panel.valueName];
 						return series;
 					}
 				}, {
@@ -307,9 +321,6 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 				}, {
 					key: 'getGradientForValue',
 					value: function getGradientForValue(data, value) {
-						console.info('Getting gradient for value');
-						console.debug(data);
-						console.debug(value);
 						var min = Math.min.apply(Math, data.thresholds);
 						var max = Math.max.apply(Math, data.thresholds);
 						var absoluteDistance = max - min;
@@ -372,49 +383,6 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 						this.panel.treeMap.ids[pos] = idString;
 					}
 				}, {
-					key: 'getDecimalsForValue',
-					value: function getDecimalsForValue(value) {
-						if (_.isNumber(this.panel.decimals)) {
-							return { decimals: this.panel.decimals, scaledDecimals: null };
-						}
-
-						var delta = value / 2;
-						var dec = -Math.floor(Math.log(delta) / Math.LN10);
-
-						var magn = Math.pow(10, -dec),
-						    norm = delta / magn,
-						    // norm is between 1.0 and 10.0
-						size;
-
-						if (norm < 1.5) {
-							size = 1;
-						} else if (norm < 3) {
-							size = 2;
-							// special case for 2.5, requires an extra decimal
-							if (norm > 2.25) {
-								size = 2.5;
-								++dec;
-							}
-						} else if (norm < 7.5) {
-							size = 5;
-						} else {
-							size = 10;
-						}
-
-						size *= magn;
-
-						// reduce starting decimals if not needed
-						if (Math.floor(value) === value) {
-							dec = 0;
-						}
-
-						var result = {};
-						result.decimals = Math.max(0, dec);
-						result.scaledDecimals = result.decimals - Math.floor(Math.log(size) / Math.LN10) + 2;
-
-						return result;
-					}
-				}, {
 					key: 'link',
 					value: function link(scope, elem, attrs, ctrl) {
 						var chartElement = elem.find('.heatmap');
@@ -424,30 +392,58 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 						console.debug(chartContainer);
 						elem.css('height', ctrl.height + 'px');
 
+						var canvas = elem.find('.canvas')[0];
+						ctrl.canvas = canvas;
+						var gradientValueMax = elem.find('.gradient-value-max')[0];
+						var gradientValueMin = elem.find('.gradient-value-min')[0];
+
 						function render(data) {
 							updateSize();
+							updateCanvasStyle();
 							updateChart(data);
+						}
+
+						function updateCanvasStyle() {
+							canvas.width = Math.max(chartElement[0].clientWidth, 100);
+							var canvasContext = canvas.getContext("2d");
+							canvasContext.clearRect(0, 0, canvas.width, canvas.height);
+
+							var grd = canvasContext.createLinearGradient(0, 0, canvas.width, 0);
+							var colorWidth = 1 / Math.max(ctrl.panel.colors.length, 1);
+							for (var i = 0; i < ctrl.panel.colors.length; i++) {
+								var currentColor = ctrl.panel.colors[i];
+								grd.addColorStop(Math.min(colorWidth * i, 1), currentColor);
+							}
+							canvasContext.fillStyle = grd;
+							canvasContext.fillRect(0, 0, canvas.width, 3);
+							ctrl.canvasContext = canvasContext;
+
+							gradientValueMax.innerText = Math.max.apply(Math, ctrl.panel.thresholds.split(','));
+							gradientValueMin.innerText = Math.min.apply(Math, ctrl.panel.thresholds.split(','));
 						}
 
 						function updateSize() {
 							elem.css('height', ctrl.height + 'px');
 						}
 
+						function getVisSize(dataPoint) {
+							return dataPoint[ctrl.panel.valueName];
+						}
+
+						function getVisColor(dataPoint) {
+							var rgbColor = ctrl.getGradientForValue({ thresholds: ctrl.panel.thresholds.split(',') }, dataPoint[ctrl.panel.valueName]);
+							var hexColor = colorToHex(rgbColor);
+							return hexColor;
+						}
+
 						function updateChart(data) {
 							d3.select("#" + ctrl.containerDivId).selectAll('*').remove();
 
-							/*data = [
-               {"value": 100, "alias": "alpha", "group": "group 1"},
-               {"value": 70, "alias": "beta", "group": "group 2"},
-               {"value": 40, "alias": "gamma", "group": "group 2"},
-               {"value": 15, "alias": "delta", "group": "group 2"},
-               {"value": 5, "alias": "epsilon", "group": "group 1"},
-               {"value": 1, "alias": "zeta", "group": "group 1"}
-             ];*/
-
 							// Make sure the necessary IDs are added
 							var idKeys = Array.from(ctrl.panel.treeMap.ids);
-							ensureArrayContains(idKeys, 'alias');
+							if (idKeys.length == 0) {
+								ensureArrayContains(idKeys, 'alias');
+							}
 							if (ctrl.panel.treeMap.enableTimeBlocks) {
 								ensureArrayContains(idKeys, 'timestamp');
 							}
@@ -455,20 +451,25 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 							// Setup Aggregations 
 							var aggs = {};
 							aggs.value = ctrl.panel.treeMap.aggregationFunction;
+							aggs.current = ctrl.panel.treeMap.aggregationFunction;
+							aggs.count = 'sum';
+							aggs.total = 'sum';
+							aggs.avg = 'mean';
+							aggs.min = 'min';
+							aggs.max = 'max';
 
-							d3plus.viz().dev(ctrl.panel.treeMap.debug).aggs(aggs).container("#" + ctrl.containerDivId).data(data)
+							d3plus.viz().dev(ctrl.panel.treeMap.debug).aggs(aggs).container("#" + ctrl.containerDivId).legend(ctrl.panel.treeMap.showLegend).data(data)
 							//.type("tree_map")
 							.type({ "mode": ctrl.panel.treeMap.mode }) // sets the mode of visualization display based on type    
 							.id({
 								"value": _.uniq(idKeys),
 								"grouping": ctrl.panel.treeMap.enableGrouping
-							}).depth(Number(ctrl.panel.treeMap.depth)).size("value").height(ctrl.height).width(ctrl.width).color({
-								"heatmap": ["grey", "purple"],
-								"value": "value"
-							}).format({ "text": function text(_text, key) {
-									return _text;
-								}
-							}).draw();
+							}).depth(Number(ctrl.panel.treeMap.depth)).size(getVisSize).height(ctrl.height).width(ctrl.width).color(getVisColor)
+							/*.format({ "text" : function( text , key ) {
+        return text;
+       }
+       })*/
+							.draw();
 						}
 
 						this.events.on('render', function onRender(data) {
@@ -485,7 +486,7 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 				return HeatmapCtrl;
 			}(MetricsPanelCtrl)));
 
-			HeatmapCtrl.templateUrl = 'module.html';
+			;HeatmapCtrl.templateUrl = 'module.html';
 
 			_export('HeatmapCtrl', HeatmapCtrl);
 
