@@ -1,9 +1,9 @@
 'use strict';
 
-System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 'app/plugins/sdk', './properties', 'lodash', './series_overrides_heatmap_ctrl', './css/heatmap.css!'], function (_export, _context) {
+System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 'app/plugins/sdk', './properties', 'lodash', 'moment', './series_overrides_heatmap_ctrl', './css/heatmap.css!'], function (_export, _context) {
 	"use strict";
 
-	var TimeSeries, kbn, MetricsPanelCtrl, heatmapEditor, displayEditor, pluginName, _, _createClass, panelOptions, panelDefaults, HeatmapCtrl;
+	var TimeSeries, kbn, MetricsPanelCtrl, heatmapEditor, displayEditor, pluginName, _, moment, _createClass, panelOptions, panelDefaults, HeatmapCtrl;
 
 	function _classCallCheck(instance, Constructor) {
 		if (!(instance instanceof Constructor)) {
@@ -79,6 +79,8 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 			pluginName = _properties.pluginName;
 		}, function (_lodash) {
 			_ = _lodash.default;
+		}, function (_moment) {
+			moment = _moment.default;
 		}, function (_series_overrides_heatmap_ctrl) {}, function (_cssHeatmapCss) {}],
 		execute: function () {
 			_createClass = function () {
@@ -100,10 +102,11 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 			}();
 
 			panelOptions = {
-				valueTypes: ['avg', 'min', 'max', 'total', 'current'],
+				aggregationFunctions: ['avg', 'min', 'max', 'total', 'current', 'count'],
 				treeMap: {
 					modes: ['squarify', 'slice', 'dice', 'slice-dice'],
-					aggregationFunctions: ['sum', 'min', 'max', 'extent', 'mean', 'median', 'quantile', 'variance', 'deviation']
+					aggregationFunctions: ['sum', 'min', 'max', 'extent', 'mean', 'median', 'quantile', 'variance', 'deviation'],
+					timestampFormats: ['YYYY-MM-DDTHH', 'YYYY-MM-DDTHH:mm', 'YYYY-MM-DDTHH:mm:ss', 'YYYY-MM-DDTHH:mm:ss.sssZ']
 				}
 			};
 			panelDefaults = {
@@ -123,12 +126,12 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 				mappingType: 1,
 				nullPointMode: 'connected',
 				format: 'none',
-				valueName: 'avg',
 				valueMaps: [{ value: 'null', op: '=', text: 'N/A' }],
 				treeMap: {
 					mode: 'squarify',
 					groups: [{ key: 'server', value: '/^.*\./g' }],
-					aggregationFunction: 'max',
+					colorByFunction: 'max',
+					sizeByFunction: 'count',
 					enableTimeBlocks: false,
 					enableGrouping: true,
 					debug: false,
@@ -206,11 +209,19 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 						this.render(preparedData);
 					}
 				}, {
+					key: 'getGroupKeys',
+					value: function getGroupKeys() {
+						return this.panel.treeMap.groups.map(function (group) {
+							return group.key;
+						});
+					}
+				}, {
 					key: 'd3plusDataProcessor',
 					value: function d3plusDataProcessor(dataArray) {
 						var resultArray = [];
+						var hasGroups = this.panel.treeMap.groups.length > 0;
 
-						if (this.panel.treeMap.groups.length < 1) {
+						if (!hasGroups) {
 							// just add the original items since there are no groups
 							for (var dataIndex = 0; dataIndex < dataArray.length; dataIndex++) {
 								var newDataItem = Object.assign({}, dataArray[dataIndex], dataArray[dataIndex].stats);
@@ -226,7 +237,12 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 								});
 							}
 							for (var dataIndex = 0; dataIndex < dataArray.length; dataIndex++) {
-								var newDataItem = Object.assign({}, dataArray[dataIndex], dataArray[dataIndex].stats);
+								var newDataItem = Object.assign({}, dataArray[dataIndex]);
+								// only add the stats if we arent using granular timeblock data
+								if (!this.panel.treeMap.enableTimeBlocks) {
+									Object.assign(newDataItem, dataArray[dataIndex].stats);
+								}
+								delete newDataItem.stats;
 
 								for (var groupIndex = 0; groupIndex < groupArray.length; groupIndex++) {
 									var key = groupArray[groupIndex].key;
@@ -254,6 +270,7 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 									var dataSeriesCopy = Object.assign({}, dataSeries);
 									delete dataSeriesCopy.datapoints;
 									delete dataSeriesCopy.flotpairs;
+									dataSeriesCopy.count = 1;
 									dataSeriesCopy.timestamp = dataSeries.flotpairs[dataPointIndex][0];
 									dataSeriesCopy.value = dataSeries.flotpairs[dataPointIndex][1];
 									timeBlockArray.push(dataSeriesCopy);
@@ -397,6 +414,19 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 						var gradientValueMax = elem.find('.gradient-value-max')[0];
 						var gradientValueMin = elem.find('.gradient-value-min')[0];
 
+						var visFormat = {
+							"text": function text(_text, opts) {
+								if (opts.key == 'timestamp') {
+									var timestamp = moment(Number(_text));
+									return timestamp.format(ctrl.panel.treeMap.timestampFormat);
+								} else if (ctrl.getGroupKeys().indexOf(opts.key) > -1) {
+									return _text;
+								} else {
+									return d3plus.string.title(_text, opts);
+								}
+							}
+						};
+
 						function render(data) {
 							updateSize();
 							updateCanvasStyle();
@@ -427,11 +457,12 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 						}
 
 						function getVisSize(dataPoint) {
-							return dataPoint[ctrl.panel.valueName];
+							return dataPoint[ctrl.panel.treeMap.sizeByFunction] || dataPoint.value;
 						}
 
 						function getVisColor(dataPoint) {
-							var rgbColor = ctrl.getGradientForValue({ thresholds: ctrl.panel.thresholds.split(',') }, dataPoint[ctrl.panel.valueName]);
+							var value = dataPoint[ctrl.panel.treeMap.colorByFunction] || dataPoint.value;
+							var rgbColor = ctrl.getGradientForValue({ thresholds: ctrl.panel.thresholds.split(',') }, value);
 							var hexColor = colorToHex(rgbColor);
 							return hexColor;
 						}
@@ -464,12 +495,7 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 							.id({
 								"value": _.uniq(idKeys),
 								"grouping": ctrl.panel.treeMap.enableGrouping
-							}).depth(Number(ctrl.panel.treeMap.depth)).size(getVisSize).height(ctrl.height).width(ctrl.width).color(getVisColor)
-							/*.format({ "text" : function( text , key ) {
-        return text;
-       }
-       })*/
-							.draw();
+							}).depth(Number(ctrl.panel.treeMap.depth)).size(getVisSize).height(ctrl.height).width(ctrl.width).color(getVisColor).format(visFormat).draw();
 						}
 
 						this.events.on('render', function onRender(data) {

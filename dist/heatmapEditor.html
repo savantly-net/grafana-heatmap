@@ -17,15 +17,20 @@
 		<input type="text" ng-model="ctrl.panel.treeMap.depth" ng-blur="ctrl.render()" class="gf-form-input width-10" >
 	</div>
 	<div class="gf-form">
-		<label class="gf-form-label width-10">Aggregation</label> 
+		<label class="gf-form-label width-10">Default Aggregation</label> 
 		<select
 			ng-options="option for option in ctrl.options.treeMap.aggregationFunctions" class="width-10"
 			ng-model="ctrl.panel.treeMap.aggregationFunction" ng-change="ctrl.refresh()"></select>
 	</div>
 	<div class="gf-form">
-		<label class="gf-form-label width-10">Time Blocks</label> 
-		<editor-checkbox text="Enable" model="ctrl.panel.treeMap.enableTimeBlocks" class="gf-form-checkbox" ></editor-checkbox>
-		<label ng-show="ctrl.panel.treeMap.enableTimeBlocks" class="gf-form-label">use "timestamp" in your ID List to override the nesting level</label>
+		<label class="gf-form-label width-10">Time Blocks<tip>Adds a group at the deepest level. Use 'timestamp' in your Group Order to override the nesting level</tip></label> 
+		<editor-checkbox text="Enable" model="ctrl.panel.treeMap.enableTimeBlocks" class="gf-form-checkbox width-10" ></editor-checkbox>
+		<label class="gf-form-label width-10" ng-show="ctrl.panel.treeMap.enableTimeBlocks">Time Format<tip>ISO Format String</tip></label> 
+		<input type="text"
+			bs-typeahead="ctrl.options.treeMap.timestampFormats"
+			ng-show="ctrl.panel.treeMap.enableTimeBlocks"
+			class="gf-form-input width-20"
+			ng-model="ctrl.panel.treeMap.timestampFormat" ng-change="ctrl.refresh()"></input>
 	</div>
 	
 	<div class="gf-form">

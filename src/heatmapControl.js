@@ -4,14 +4,16 @@ import kbn from 'app/core/utils/kbn';
 import {MetricsPanelCtrl} from 'app/plugins/sdk';
 import {heatmapEditor, displayEditor, pluginName} from './properties';
 import _ from 'lodash';
+import moment from 'moment';
 import './series_overrides_heatmap_ctrl';
 import './css/heatmap.css!';
 
 const panelOptions = {
-	valueTypes: ['avg', 'min', 'max', 'total', 'current'],
+	aggregationFunctions: ['avg', 'min', 'max', 'total', 'current', 'count'],
 	treeMap:{
     	modes: ['squarify', 'slice', 'dice', 'slice-dice'],
-    	aggregationFunctions: ['sum', 'min', 'max', 'extent', 'mean', 'median', 'quantile', 'variance', 'deviation']
+    	aggregationFunctions: ['sum', 'min', 'max', 'extent', 'mean', 'median', 'quantile', 'variance', 'deviation'],
+    	timestampFormats: ['YYYY-MM-DDTHH', 'YYYY-MM-DDTHH:mm', 'YYYY-MM-DDTHH:mm:ss', 'YYYY-MM-DDTHH:mm:ss.sssZ']
 	}
 };
 
@@ -32,14 +34,14 @@ const panelDefaults = {
 	mappingType: 1,
 	nullPointMode: 'connected',
 	format: 'none',
-	valueName: 'avg',
     valueMaps: [
       { value: 'null', op: '=', text: 'N/A' }
     ],
     treeMap: {
     	mode: 'squarify',
     	groups: [{key:'server', value: '/^.*\./g'}],
-    	aggregationFunction: 'max',
+    	colorByFunction: 'max',
+    	sizeByFunction: 'count',
     	enableTimeBlocks: false,
     	enableGrouping: true,
     	debug: false,
@@ -105,13 +107,20 @@ class HeatmapCtrl extends MetricsPanelCtrl {
 		this.render(preparedData);
 	}
 	
+	getGroupKeys(){
+		return this.panel.treeMap.groups.map(function(group){
+			return group.key;
+		});
+	}
+	
 	/**
 	 * Prepare data for d3plus
 	 */
 	d3plusDataProcessor(dataArray){
 		var resultArray = [];
+		var hasGroups = (this.panel.treeMap.groups.length > 0)
 		
-		if(this.panel.treeMap.groups.length < 1){
+		if(!hasGroups){
 			// just add the original items since there are no groups
 			for (var dataIndex=0; dataIndex < dataArray.length; dataIndex++){
 				var newDataItem = Object.assign({}, dataArray[dataIndex], dataArray[dataIndex].stats);
@@ -127,7 +136,12 @@ class HeatmapCtrl extends MetricsPanelCtrl {
 				})
 			}
 			for (var dataIndex=0; dataIndex < dataArray.length; dataIndex++){
-				var newDataItem = Object.assign({}, dataArray[dataIndex], dataArray[dataIndex].stats);
+				var newDataItem = Object.assign({}, dataArray[dataIndex]);
+				// only add the stats if we arent using granular timeblock data
+				if(!this.panel.treeMap.enableTimeBlocks){
+					Object.assign(newDataItem, dataArray[dataIndex].stats);
+				}
+				delete newDataItem.stats;
 				
 				for(var groupIndex=0; groupIndex < groupArray.length; groupIndex++){
 					var key = groupArray[groupIndex].key;
@@ -156,6 +170,7 @@ class HeatmapCtrl extends MetricsPanelCtrl {
 					var dataSeriesCopy = Object.assign({}, dataSeries);
 					delete dataSeriesCopy.datapoints;
 					delete dataSeriesCopy.flotpairs;
+					dataSeriesCopy.count = 1;
 					dataSeriesCopy.timestamp = dataSeries.flotpairs[dataPointIndex][0];
 					dataSeriesCopy.value = dataSeries.flotpairs[dataPointIndex][1];
 					timeBlockArray.push(dataSeriesCopy);
@@ -287,6 +302,23 @@ class HeatmapCtrl extends MetricsPanelCtrl {
 	    ctrl.canvas = canvas;
 	    var gradientValueMax = elem.find('.gradient-value-max')[0];
 	    var gradientValueMin = elem.find('.gradient-value-min')[0];
+	    
+
+    	var visFormat =
+		{ 
+			"text" : function(text, opts) {
+				if(opts.key == 'timestamp'){
+					var timestamp = moment(Number(text));
+					return timestamp.format(ctrl.panel.treeMap.timestampFormat);
+				} 
+				else if(ctrl.getGroupKeys().indexOf(opts.key)>-1) {
+					return text;
+				}
+				else{
+					return d3plus.string.title(text, opts);
+				}
+			}
+		};
     	
 
     	function render(data){
@@ -319,14 +351,16 @@ class HeatmapCtrl extends MetricsPanelCtrl {
     	}
     	
     	function getVisSize(dataPoint){
-    		return dataPoint[ctrl.panel.valueName];
+    		return dataPoint[ctrl.panel.treeMap.sizeByFunction] || dataPoint.value;
     	}
     	
     	function getVisColor(dataPoint){
-    		var rgbColor = ctrl.getGradientForValue({thresholds: ctrl.panel.thresholds.split(',')}, dataPoint[ctrl.panel.valueName]);
+    		var value = dataPoint[ctrl.panel.treeMap.colorByFunction] || dataPoint.value;
+    		var rgbColor = ctrl.getGradientForValue({thresholds: ctrl.panel.thresholds.split(',')}, value);
 			var hexColor = colorToHex(rgbColor);
 			return hexColor;
     	}
+    	
     	
     	function updateChart(data){
     		d3.select("#"+ctrl.containerDivId).selectAll('*').remove();
@@ -367,10 +401,7 @@ class HeatmapCtrl extends MetricsPanelCtrl {
     			.height(ctrl.height)
     			.width(ctrl.width)
     			.color(getVisColor)
-    			/*.format({ "text" : function( text , key ) {
-				    return text;
-				  }
-				})*/
+    			.format(visFormat)
     			.draw();
     	}
     	
