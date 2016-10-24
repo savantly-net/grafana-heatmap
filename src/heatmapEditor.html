@@ -1,7 +1,7 @@
 <div class="gf-form-group">
 	<h5>Development</h5>
 	<div class="gf-form">
-		<label class="gf-form-label width-10">Debug</label> 
+		<label class="gf-form-label width-10">Debug<tip>Display messages in browser console</tip></label> 
 		<editor-checkbox text="Enable" model="ctrl.panel.treeMap.debug" class="gf-form-checkbox" ></editor-checkbox>
 	</div>
 </div>
@@ -63,7 +63,7 @@
 				</div>
 				
 				<div class="gf-form">
-					<label class="gf-form-label">alias or regex</label>
+					<label class="gf-form-label">regex</label>
 				</div>
 				<div class="gf-form width-10">
 					<input type="text" ng-model="group.value" bs-typeahead="getSeriesNames" ng-blur="ctrl.render()" data-min-length=0 data-items=100 class="gf-form-input">
