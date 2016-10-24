@@ -59,7 +59,7 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 	}
 
 	function getColorByXPercentage(canvas, xPercent) {
-		var x = canvas.width * xPercent;
+		var x = canvas.width * xPercent || 0;
 		var context = canvas.getContext("2d");
 		var p = context.getImageData(x, 1, 1, 1).data;
 		var color = 'rgba(' + [p[0] + ',' + p[1] + ',' + p[2] + ',' + p[3]] + ')';
