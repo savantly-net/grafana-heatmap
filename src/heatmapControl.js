@@ -80,7 +80,7 @@ class HeatmapCtrl extends MetricsPanelCtrl {
 
 		SystemJS.import(d3plusPath).then(function d3plusLoaded(){
 			console.log('d3plus is loaded');
-			_this.events.emit('render');
+			_this.events.emit('data-received');
 		});
 	}
 	
@@ -100,8 +100,10 @@ class HeatmapCtrl extends MetricsPanelCtrl {
 	onDataReceived(dataList){
 		console.info('received data');
 		console.debug(dataList);
-		this.series = dataList.map(this.seriesHandler.bind(this));
-		console.info('mapped dataList to series');
+		if( typeof dataList !== undefined ) {
+			this.series = dataList.map(this.seriesHandler.bind(this));
+			console.info('mapped dataList to series');
+		}
 
 		var preparedData = this.d3plusDataProcessor(this.series);
 		this.render(preparedData);
