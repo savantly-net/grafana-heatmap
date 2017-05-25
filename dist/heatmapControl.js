@@ -131,7 +131,7 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 					mode: 'squarify',
 					groups: [{ key: 'server', value: '/^.*\./g' }],
 					colorByFunction: 'max',
-					sizeByFunction: 'count',
+					sizeByFunction: 'constant',
 					enableTimeBlocks: false,
 					enableGrouping: true,
 					debug: false,
@@ -178,7 +178,7 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 
 						SystemJS.import(d3plusPath).then(function d3plusLoaded() {
 							console.log('d3plus is loaded');
-							_this.events.emit('render');
+							_this.events.emit('data-received');
 						});
 					}
 				}, {
@@ -202,8 +202,10 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 					value: function onDataReceived(dataList) {
 						console.info('received data');
 						console.debug(dataList);
-						this.series = dataList.map(this.seriesHandler.bind(this));
-						console.info('mapped dataList to series');
+						if (undefined != dataList) {
+							this.series = dataList.map(this.seriesHandler.bind(this));
+							console.info('mapped dataList to series');
+						}
 
 						var preparedData = this.d3plusDataProcessor(this.series);
 						this.render(preparedData);
@@ -457,7 +459,9 @@ System.register(['./libs/d3/d3', 'app/core/time_series2', 'app/core/utils/kbn', 
 						}
 
 						function getVisSize(dataPoint) {
-							return dataPoint[ctrl.panel.treeMap.sizeByFunction] || dataPoint.value;
+							if (ctrl.panel.treeMap.sizeByFunction == 'constant') return 1;else {
+								return dataPoint[ctrl.panel.treeMap.sizeByFunction] || dataPoint.value;
+							}
 						}
 
 						function getVisColor(dataPoint) {

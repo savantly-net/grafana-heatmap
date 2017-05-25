@@ -41,7 +41,7 @@ const panelDefaults = {
     	mode: 'squarify',
     	groups: [{key:'server', value: '/^.*\./g'}],
     	colorByFunction: 'max',
-    	sizeByFunction: 'count',
+    	sizeByFunction: 'constant',
     	enableTimeBlocks: false,
     	enableGrouping: true,
     	debug: false,
@@ -100,7 +100,7 @@ class HeatmapCtrl extends MetricsPanelCtrl {
 	onDataReceived(dataList){
 		console.info('received data');
 		console.debug(dataList);
-		if( typeof dataList !== undefined ) {
+		if(undefined != dataList) {
 			this.series = dataList.map(this.seriesHandler.bind(this));
 			console.info('mapped dataList to series');
 		}
@@ -353,7 +353,10 @@ class HeatmapCtrl extends MetricsPanelCtrl {
     	}
     	
     	function getVisSize(dataPoint){
-    		return dataPoint[ctrl.panel.treeMap.sizeByFunction] || dataPoint.value;
+    		if(ctrl.panel.treeMap.sizeByFunction == 'constant') return 1;
+    		else {
+        		return dataPoint[ctrl.panel.treeMap.sizeByFunction] || dataPoint.value;
+    		}
     	}
     	
     	function getVisColor(dataPoint){

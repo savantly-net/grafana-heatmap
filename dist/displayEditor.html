@@ -65,7 +65,10 @@
 	</div>
 	<div class="gf-form">
 		<label class="gf-form-label width-10">Size By<tip>falls back to 'value' field on non-aggregated data</tip></label>
-		<select ng-options="option for option in ctrl.options.aggregationFunctions" ng-model="ctrl.panel.treeMap.sizeByFunction" ng-change="ctrl.refresh()"></select>
+		<select ng-model="ctrl.panel.treeMap.sizeByFunction" ng-change="ctrl.refresh()">
+			<option>constant</option>
+			<option ng-repeat="option in ctrl.options.aggregationFunctions">{{option}}</option>
+		</select>
 	</div>
 </div>
 

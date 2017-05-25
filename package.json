@@ -1,6 +1,6 @@
 {
   "name": "grafana-heatmap",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A heatmap panel plugin for Grafana",
   "main": "src/module.js",
   "scripts": {
