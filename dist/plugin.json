@@ -15,7 +15,7 @@
       {"name": "Apache License", "url": "https://github.com/savantly-net/grafana-heatmap/blob/master/LICENSE"}
     ],
     "version": "1.0.0",
-    "updated": "2019-08-02",
+    "updated": "2019-08-05",
     "logos": {
         "small": "img/icn-heatmap-panel.svg",
         "large": "img/icn-heatmap-panel.svg"
